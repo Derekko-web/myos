@@ -43,6 +43,9 @@ static const uint32_t AMD_RECV_DESCRIPTOR_START_END = 0x03000000;
 static const uint32_t AMD_BUFFER_BYTE_COUNT_MASK = 0x0FFF;
 static const uint32_t AMD_SEND_DESCRIPTOR_READY_FLAGS = 0x8300F000;
 static const uint32_t AMD_RECV_DESCRIPTOR_EMPTY_FLAGS = AMD_DESCRIPTOR_OWN | AMD_DESCRIPTOR_INIT_FLAGS;
+static const int AMD_TRACE_TRANSPORT_OFFSET = 14 + 20;
+static const int AMD_ETHERNET_MIN_FRAME_SIZE = 60;
+static const int AMD_ETHERNET_MAX_FRAME_SIZE = 1518;
 
 RawDataHandler::RawDataHandler(amd_am79c973* backend)
 {
@@ -222,34 +225,33 @@ void amd_am79c973::Send(uint8_t* buffer, int size)
     int sendDescriptor = currentSendBuffer;
     currentSendBuffer = (currentSendBuffer + 1) % 8;
 
-    if(size > 1518)
-        size = 1518;
+    if(size > AMD_ETHERNET_MAX_FRAME_SIZE)
+        size = AMD_ETHERNET_MAX_FRAME_SIZE;
 
-    for(uint8_t* src = buffer + size - 1,
-                *dst = (uint8_t*)(sendBufferDescr[sendDescriptor].address + size - 1);
-        src >= buffer; src--, dst--)
-    {
-        *dst = *src;
-    }
+    int transmitSize = size < AMD_ETHERNET_MIN_FRAME_SIZE ? AMD_ETHERNET_MIN_FRAME_SIZE : size;
+    uint8_t* dst = (uint8_t*)sendBufferDescr[sendDescriptor].address;
 
-    PrintTracePrefix("SENDING: ", true);
-    for(int i = 0; i < (size > 64 ? 64 : size); i++)
+    for(int i = 0; i < transmitSize; i++)
+        dst[i] = i < size ? buffer[i] : 0;
+
+    PrintTracePrefix("SEND: ", true);
+    for(int i = AMD_TRACE_TRANSPORT_OFFSET; i < (transmitSize > 64 ? 64 : transmitSize); i++)
     {
-        printfHex(buffer[i]);
+        printfHex(dst[i]);
         printf(" ");
     }
 
     sendBufferDescr[sendDescriptor].avail = 0;
     sendBufferDescr[sendDescriptor].flags2 = 0;
     sendBufferDescr[sendDescriptor].flags = AMD_SEND_DESCRIPTOR_READY_FLAGS
-                                          | ((uint16_t)((-size) & AMD_BUFFER_BYTE_COUNT_MASK));
+                                          | ((uint16_t)((-transmitSize) & AMD_BUFFER_BYTE_COUNT_MASK));
     registerAddressPort.Write(AMD_CSR_STATUS_AND_CONTROL);
     registerDataPort.Write(AMD_CSR0_TRANSMIT_DEMAND | AMD_CSR0_INTERRUPT_ENABLE);
 }
 
 void amd_am79c973::Receive()
 {
-    PrintTracePrefix("RECEIVING: ", false);
+    PrintTracePrefix("RECV: ", false);
 
     for(; (recvBufferDescr[currentRecvBuffer].flags & AMD_DESCRIPTOR_OWN) == 0;
         currentRecvBuffer = (currentRecvBuffer + 1) % 8)
@@ -263,7 +265,7 @@ void amd_am79c973::Receive()
 
             uint8_t* buffer = (uint8_t*)(recvBufferDescr[currentRecvBuffer].address);
 
-            for(uint32_t i = 0; i < (size > 64 ? 64 : size); i++)
+            for(uint32_t i = AMD_TRACE_TRANSPORT_OFFSET; i < (size > 64 ? 64 : size); i++)
             {
                 printfHex(buffer[i]);
                 printf(" ");

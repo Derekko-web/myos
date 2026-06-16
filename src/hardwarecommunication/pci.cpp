@@ -18,6 +18,7 @@ static const uint32_t PCI_WORD_HIGH_BYTE_MASK = 0xFF00;
 
 static const uint32_t PCI_CONFIG_VENDOR_ID_OFFSET = 0x00;
 static const uint32_t PCI_CONFIG_DEVICE_ID_OFFSET = 0x02;
+static const uint32_t PCI_CONFIG_COMMAND_OFFSET = 0x04;
 static const uint32_t PCI_CONFIG_REVISION_ID_OFFSET = 0x08;
 static const uint32_t PCI_CONFIG_INTERFACE_ID_OFFSET = 0x09;
 static const uint32_t PCI_CONFIG_SUBCLASS_ID_OFFSET = 0x0A;
@@ -31,6 +32,8 @@ static const uint32_t PCI_HEADER_TYPE_MASK = 0x7F;
 static const uint32_t PCI_BAR_IO_SPACE = 0x1;
 static const uint32_t PCI_BAR_MEMORY_TYPE_MASK = 0x3;
 static const uint32_t PCI_BAR_IO_ADDRESS_MASK = 0x3;
+static const uint32_t PCI_COMMAND_IO_SPACE = 0x1;
+static const uint32_t PCI_COMMAND_BUS_MASTER = 0x4;
 
 static const uint16_t PCI_VENDOR_ID_NONE = 0x0000;
 static const uint16_t PCI_VENDOR_ID_INVALID = 0xFFFF;
@@ -139,6 +142,14 @@ void PeripheralComponentInterconnectController::SelectDrivers(DriverManager* dri
                 }
 
                 Driver* driver = GetDriver(dev, interrupts);
+                if(driver != 0 && dev.vendor_id == PCI_VENDOR_ID_AMD
+                && dev.device_id == PCI_DEVICE_ID_AMD_AM79C973)
+                {
+                    uint32_t command = Read(bus, device, function, PCI_CONFIG_COMMAND_OFFSET) & 0xFFFF;
+                    Write(bus, device, function, PCI_CONFIG_COMMAND_OFFSET,
+                          command | PCI_COMMAND_IO_SPACE | PCI_COMMAND_BUS_MASTER);
+                }
+
                 if(driver != 0)
                     driverManager->AddDriver(driver);
                 
@@ -275,6 +286,5 @@ PeripheralComponentInterconnectDeviceDescriptor PeripheralComponentInterconnectC
     
     return result;
 }
-
 
 

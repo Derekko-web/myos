@@ -11,6 +11,7 @@ static const uint8_t ARP_PROTOCOL_ADDRESS_SIZE_IPV4 = 4;
 static const uint16_t ARP_COMMAND_REQUEST_BE = 0x0100;
 static const uint16_t ARP_COMMAND_REPLY_BE = 0x0200;
 static const int ARP_CACHE_SIZE = 128;
+static const uint64_t ARP_UNKNOWN_MAC = 0;
 
 AddressResolutionProtocol::AddressResolutionProtocol(EtherFrameProvider* backend)
 : EtherFrameHandler(backend, ETHERTYPE_ARP)
@@ -86,10 +87,10 @@ void AddressResolutionProtocol::RequestMACAddress(uint32_t IP_BE)
 
     arp.srcMAC = backend->GetMACAddress();
     arp.srcIP = backend->GetIPAddress();
-    arp.dstMAC = ETHERNET_BROADCAST_MAC;
+    arp.dstMAC = ARP_UNKNOWN_MAC;
     arp.dstIP = IP_BE;
 
-    Send(arp.dstMAC, (uint8_t*)&arp, sizeof(AddressResolutionProtocolMessage));
+    Send(ETHERNET_BROADCAST_MAC, (uint8_t*)&arp, sizeof(AddressResolutionProtocolMessage));
 }
 
 uint64_t AddressResolutionProtocol::GetMACFromCache(uint32_t IP_BE)
@@ -105,9 +106,6 @@ uint64_t AddressResolutionProtocol::Resolve(uint32_t IP_BE)
     uint64_t result = GetMACFromCache(IP_BE);
     if(result == ETHERNET_BROADCAST_MAC)
         RequestMACAddress(IP_BE);
-
-    while(result == ETHERNET_BROADCAST_MAC)
-        result = GetMACFromCache(IP_BE);
 
     return result;
 }

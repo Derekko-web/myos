@@ -18,6 +18,8 @@
 #include <net/arp.h>
 #include <net/ipv4.h>
 #include <net/icmp.h>
+#include <net/udp.h>
+#include <net/tcp.h>
 
 #define NETWORK_DEMO
 // #define HARDDRIVE_DEMO
@@ -191,6 +193,78 @@ public:
     
 };
 
+class PrintfUDPHandler : public UserDatagramProtocolHandler
+{
+public:
+    void HandleUserDatagramProtocolMessage(UserDatagramProtocolSocket* socket,
+                                           uint8_t* data,
+                                           uint16_t size)
+    {
+        char foo[] = " ";
+        for(uint16_t i = 0; i < size; i++)
+        {
+            foo[0] = data[i];
+            printf(foo);
+        }
+    }
+};
+
+class PrintfTCPHandler : public TransmissionControlProtocolHandler
+{
+public:
+    bool HandleTransmissionControlProtocolMessage(TransmissionControlProtocolSocket* socket,
+                                                  uint8_t* data,
+                                                  uint16_t size)
+    {
+        char foo[] = " ";
+        for(uint16_t i = 0; i < size; i++)
+        {
+            foo[0] = data[i];
+            printf(foo);
+        }
+
+        if(size > 4
+        && data[0] == 'G'
+        && data[1] == 'E'
+        && data[2] == 'T'
+        && data[3] == ' ')
+        {
+            if(size > 9
+            && data[4] == '/'
+            && data[5] == ' '
+            && data[6] == 'H'
+            && data[7] == 'T'
+            && data[8] == 'T'
+            && data[9] == 'P')
+            {
+                static const char response[] =
+                    "HTTP/1.1 200 OK\r\n"
+                    "Server: MyOS\r\n"
+                    "Content-Type: text/html\r\n"
+                    "Content-Length: 127\r\n"
+                    "Connection: close\r\n"
+                    "\r\n"
+                    "<html><head><title>My Operating System</title></head><body><b>My Operating System</b> http://www.AlgorithMan.de</body></html>\r\n";
+                socket->Send((uint8_t*)response, sizeof(response)-1);
+            }
+            else
+            {
+                static const char response[] =
+                    "HTTP/1.1 204 No Content\r\n"
+                    "Server: MyOS\r\n"
+                    "Content-Length: 0\r\n"
+                    "Connection: close\r\n"
+                    "\r\n";
+                socket->Send((uint8_t*)response, sizeof(response)-1);
+            }
+
+            socket->Disconnect();
+        }
+
+        return true;
+    }
+};
+
 
 void sysprintf(const char* str)
 {
@@ -335,7 +409,7 @@ extern "C" void kernelMain(const void* multiboot_structure, uint32_t /*multiboot
     #endif
 
     #ifdef NETWORK_DEMO
-    printf("\nNetwork Demo A01-A04\n");
+    printf("\nNetwork Demo A01-A09\n");
 
     amd_am79c973* eth0 = 0;
     if(drvManager.numDrivers > 2)
@@ -367,17 +441,27 @@ extern "C" void kernelMain(const void* multiboot_structure, uint32_t /*multiboot
 
         InternetProtocolProvider* ipv4 = new InternetProtocolProvider(etherframe, arp, gip_be, subnet_be);
         InternetControlMessageProtocol* icmp = new InternetControlMessageProtocol(ipv4);
+        UserDatagramProtocolProvider* udp = new UserDatagramProtocolProvider(ipv4);
+        TransmissionControlProtocolProvider* tcp = new TransmissionControlProtocolProvider(ipv4);
+
+        PrintfUDPHandler* udpHandler = new PrintfUDPHandler();
+        UserDatagramProtocolSocket* udpSocket = udp->Listen(1234);
+        udp->Bind(udpSocket, udpHandler);
+
+        PrintfTCPHandler* tcpHandler = new PrintfTCPHandler();
+        TransmissionControlProtocolSocket* tcpSocket = tcp->Listen(1234);
+        tcp->Bind(tcpSocket, tcpHandler);
 
         interrupts.Activate();
 
         printf("Local IP: 10.0.2.15\n");
         printf("Gateway: 10.0.2.2\n");
-        printf("Resolving gateway with ARP and sending ICMP echo request\n");
+        printf("Resolving gateway with ARP\n");
+        printf("TCP HTTP server listening on port 1234\n");
 
         clearScreen();
         eth0->ResetTraceOutput();
-        arp->BroadcastMACAddress(gip_be);
-        icmp->RequestEchoReply(gip_be);
+        arp->RequestMACAddress(gip_be);
     }
     else
     {

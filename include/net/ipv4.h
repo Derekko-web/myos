@@ -10,6 +10,8 @@ namespace myos
     namespace net
     {
         static const common::uint8_t IP_PROTOCOL_ICMP = 0x01;
+        static const common::uint8_t IP_PROTOCOL_TCP = 0x06;
+        static const common::uint8_t IP_PROTOCOL_UDP = 0x11;
 
         struct InternetProtocolV4Message
         {
@@ -47,7 +49,7 @@ namespace myos
             void Send(common::uint32_t dstIP_BE, common::uint8_t* internetprotocolPayload, common::uint32_t size);
         };
 
-        class InternetProtocolProvider : EtherFrameHandler
+        class InternetProtocolProvider : public EtherFrameHandler
         {
             friend class InternetProtocolHandler;
 
