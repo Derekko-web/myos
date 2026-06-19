@@ -11,6 +11,7 @@
 #include <drivers/mouse.h>
 #include <drivers/vga.h>
 #include <drivers/ata.h>
+#include <filesystem/msdospart.h>
 #include <gui/desktop.h>
 #include <gui/window.h>
 #include <multitasking.h>
@@ -21,8 +22,14 @@
 #include <net/udp.h>
 #include <net/tcp.h>
 
-#define NETWORK_DEMO
-// #define HARDDRIVE_DEMO
+// #define B01_PARTITION_DEMO
+#define B02_FAT32_DEMO
+// #define NETWORK_DEMO
+// #define KERNEL_TRACE_OUTPUT
+
+#if defined(B01_PARTITION_DEMO) || defined(B02_FAT32_DEMO)
+#define HARDDRIVE_DEMO
+#endif
 
 #if !defined(HARDDRIVE_DEMO) && !defined(NETWORK_DEMO)
 #define GRAPHICSMODE
@@ -31,6 +38,7 @@
 using namespace myos;
 using namespace myos::common;
 using namespace myos::drivers;
+using namespace myos::filesystem;
 using namespace myos::hardwarecommunication;
 using namespace myos::gui;
 using namespace myos::net;
@@ -193,12 +201,10 @@ public:
     
 };
 
-class PrintfUDPHandler : public UserDatagramProtocolHandler
+class PrintfUDPHandler : public UDPHandler
 {
 public:
-    void HandleUserDatagramProtocolMessage(UserDatagramProtocolSocket* socket,
-                                           uint8_t* data,
-                                           uint16_t size)
+    void HandleUDPMessage(UDPSocket* socket, uint8_t* data, uint16_t size)
     {
         char foo[] = " ";
         for(uint16_t i = 0; i < size; i++)
@@ -209,12 +215,10 @@ public:
     }
 };
 
-class PrintfTCPHandler : public TransmissionControlProtocolHandler
+class PrintfTCPHandler : public TCPHandler
 {
 public:
-    bool HandleTransmissionControlProtocolMessage(TransmissionControlProtocolSocket* socket,
-                                                  uint8_t* data,
-                                                  uint16_t size)
+    bool HandleTCPMessage(TCPSocket* socket, uint8_t* data, uint16_t size)
     {
         char foo[] = " ";
         for(uint16_t i = 0; i < size; i++)
@@ -303,7 +307,9 @@ extern "C" void callConstructors()
 
 extern "C" void kernelMain(const void* multiboot_structure, uint32_t /*multiboot_magic*/)
 {
+    #ifdef KERNEL_TRACE_OUTPUT
     printf("Hello World! --- http://www.AlgorithMan.de\n");
+    #endif
 
     GlobalDescriptorTable gdt;
 
@@ -313,6 +319,7 @@ extern "C" void kernelMain(const void* multiboot_structure, uint32_t /*multiboot
     size_t heapSize = memorySize > heap + 10*1024 ? memorySize - heap - 10*1024 : 0;
     MemoryManager memoryManager(heap, heapSize);
 
+    #ifdef KERNEL_TRACE_OUTPUT
     printf("heap: 0x");
     printfHex32(heap);
 
@@ -320,6 +327,7 @@ extern "C" void kernelMain(const void* multiboot_structure, uint32_t /*multiboot
     printf("\nallocated: 0x");
     printfHex32((size_t)allocated);
     printf("\n");
+    #endif
 
     TaskManager taskManager;
 
@@ -333,7 +341,9 @@ extern "C" void kernelMain(const void* multiboot_structure, uint32_t /*multiboot
     InterruptManager interrupts(IRQ_BASE, &gdt, &taskManager);
     SyscallHandler syscalls(&interrupts, SYSCALL_INTERRUPT);
     
+    #ifdef KERNEL_TRACE_OUTPUT
     printf("Initializing Hardware, Stage 1\n");
+    #endif
 
     #ifdef GRAPHICSMODE
         Desktop desktop(320,200, RGB_CHANNEL_OFF, RGB_CHANNEL_OFF, RGB_CHANNEL_MID);
@@ -365,11 +375,15 @@ extern "C" void kernelMain(const void* multiboot_structure, uint32_t /*multiboot
         #ifdef GRAPHICSMODE
             VideoGraphicsArray vga;
         #endif
-        
+
+    #ifdef KERNEL_TRACE_OUTPUT
     printf("Initializing Hardware, Stage 2\n");
+    #endif
         drvManager.ActivateAll();
-        
+
+    #ifdef KERNEL_TRACE_OUTPUT
     printf("Initializing Hardware, Stage 3\n");
+    #endif
 
     #ifdef GRAPHICSMODE
         vga.SetMode(320,200,8);
@@ -380,31 +394,29 @@ extern "C" void kernelMain(const void* multiboot_structure, uint32_t /*multiboot
     #endif
 
     #ifdef HARDDRIVE_DEMO
-    interrupts.Activate();
-
+    #ifdef KERNEL_TRACE_OUTPUT
     printf("\nPOSIX-style System Call Demo\n");
     printf("Calling int 0x80 with syscall number 4\n");
     sysprintf("Syscall write says: hello from int 0x80\n");
     printf("Returned from system call\n");
 
     printf("\nHard Drive Demo\n");
-    printf("\nS-ATA primary master: ");
+    printf("\nATA primary master: ");
+    #endif
     AdvancedTechnologyAttachment ata0m(true, ATA_PRIMARY_IO_BASE);
+    #ifdef KERNEL_TRACE_OUTPUT
     ata0m.Identify();
 
-    uint8_t hardDriveDemoMessage[] = "myos hard drive demo";
-    uint32_t hardDriveDemoSector = 1;
+    printf("\nATA primary slave: ");
+    #endif
+    AdvancedTechnologyAttachment ata0s(false, ATA_PRIMARY_IO_BASE);
+    #ifdef KERNEL_TRACE_OUTPUT
+    ata0s.Identify();
+    #endif
 
-    printf("\nWriting demo message to primary master sector 0x");
-    printfHex32(hardDriveDemoSector);
-    printf("\n");
-    ata0m.Write28(hardDriveDemoSector, hardDriveDemoMessage, sizeof(hardDriveDemoMessage)-1);
-    ata0m.Flush();
-
-    printf("\nReading it back from sector 0x");
-    printfHex32(hardDriveDemoSector);
-    printf("\n");
-    ata0m.Read28(hardDriveDemoSector, sizeof(hardDriveDemoMessage)-1);
+    #if defined(B01_PARTITION_DEMO) || defined(B02_FAT32_DEMO)
+    MSDOSPartitionTable::ReadPartitions(&ata0s);
+    #endif
     printf("\n");
     #endif
 
@@ -422,10 +434,10 @@ extern "C" void kernelMain(const void* multiboot_structure, uint32_t /*multiboot
                        | ((uint32_t)ip3 << 16)
                        | ((uint32_t)ip2 << 8)
                        | (uint32_t)ip1;
-        eth0->SetIPAddress(ip_be);
+        eth0->SetIP(ip_be);
 
         EtherFrameProvider* etherframe = new EtherFrameProvider(eth0);
-        AddressResolutionProtocol* arp = new AddressResolutionProtocol(etherframe);
+        ARP* arp = new ARP(etherframe);
 
         uint8_t gip1 = 10, gip2 = 0, gip3 = 2, gip4 = 2;
         uint32_t gip_be = ((uint32_t)gip4 << 24)
@@ -439,17 +451,17 @@ extern "C" void kernelMain(const void* multiboot_structure, uint32_t /*multiboot
                            | ((uint32_t)subnet2 << 8)
                            | (uint32_t)subnet1;
 
-        InternetProtocolProvider* ipv4 = new InternetProtocolProvider(etherframe, arp, gip_be, subnet_be);
-        InternetControlMessageProtocol* icmp = new InternetControlMessageProtocol(ipv4);
-        UserDatagramProtocolProvider* udp = new UserDatagramProtocolProvider(ipv4);
-        TransmissionControlProtocolProvider* tcp = new TransmissionControlProtocolProvider(ipv4);
+        IPProvider* ipv4 = new IPProvider(etherframe, arp, gip_be, subnet_be);
+        ICMP* icmp = new ICMP(ipv4);
+        UDPProvider* udp = new UDPProvider(ipv4);
+        TCPProvider* tcp = new TCPProvider(ipv4);
 
         PrintfUDPHandler* udpHandler = new PrintfUDPHandler();
-        UserDatagramProtocolSocket* udpSocket = udp->Listen(1234);
+        UDPSocket* udpSocket = udp->Listen(1234);
         udp->Bind(udpSocket, udpHandler);
 
         PrintfTCPHandler* tcpHandler = new PrintfTCPHandler();
-        TransmissionControlProtocolSocket* tcpSocket = tcp->Listen(1234);
+        TCPSocket* tcpSocket = tcp->Listen(1234);
         tcp->Bind(tcpSocket, tcpHandler);
 
         interrupts.Activate();
@@ -461,7 +473,7 @@ extern "C" void kernelMain(const void* multiboot_structure, uint32_t /*multiboot
 
         clearScreen();
         eth0->ResetTraceOutput();
-        arp->RequestMACAddress(gip_be);
+        arp->RequestMAC(gip_be);
     }
     else
     {

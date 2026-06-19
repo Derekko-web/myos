@@ -285,17 +285,17 @@ void amd_am79c973::SetHandler(RawDataHandler* handler)
     this->handler = handler;
 }
 
-uint64_t amd_am79c973::GetMACAddress()
+uint64_t amd_am79c973::GetMAC()
 {
     return initBlock.physicalAddress;
 }
 
-void amd_am79c973::SetIPAddress(uint32_t ip)
+void amd_am79c973::SetIP(uint32_t ip)
 {
     initBlock.logicalAddress = ip;
 }
 
-uint32_t amd_am79c973::GetIPAddress()
+uint32_t amd_am79c973::GetIP()
 {
     return initBlock.logicalAddress;
 }

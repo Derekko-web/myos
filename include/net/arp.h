@@ -9,10 +9,10 @@ namespace myos
     namespace net
     {
 
-        struct AddressResolutionProtocolMessage
+        struct ARPMessage
         {
             common::uint16_t hardwareType;
-            common::uint16_t protocol;
+            common::uint16_t proto;
             common::uint8_t hardwareAddressSize;
             common::uint8_t protocolAddressSize;
             common::uint16_t command;
@@ -23,22 +23,22 @@ namespace myos
             common::uint32_t dstIP;
         } __attribute__((packed));
 
-        class AddressResolutionProtocol : public EtherFrameHandler
+        class ARP : public EtherFrameHandler
         {
-            common::uint32_t IPcache[128];
-            common::uint64_t MACcache[128];
+            common::uint32_t ipCache[128];
+            common::uint64_t macCache[128];
             int numCacheEntries;
 
         public:
-            AddressResolutionProtocol(EtherFrameProvider* backend);
-            ~AddressResolutionProtocol();
+            ARP(EtherFrameProvider* backend);
+            ~ARP();
 
             bool OnEtherFrameReceived(common::uint8_t* etherframePayload, common::uint32_t size);
 
-            void RequestMACAddress(common::uint32_t IP_BE);
-            common::uint64_t GetMACFromCache(common::uint32_t IP_BE);
-            common::uint64_t Resolve(common::uint32_t IP_BE);
-            void BroadcastMACAddress(common::uint32_t IP_BE);
+            void RequestMAC(common::uint32_t ip_BE);
+            common::uint64_t GetMACFromCache(common::uint32_t ip_BE);
+            common::uint64_t Resolve(common::uint32_t ip_BE);
+            void BroadcastMAC(common::uint32_t ip_BE);
         };
 
     }

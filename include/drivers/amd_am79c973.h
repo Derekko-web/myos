@@ -85,9 +85,9 @@ namespace myos
             void ResetTraceOutput();
 
             void SetHandler(RawDataHandler* handler);
-            common::uint64_t GetMACAddress();
-            void SetIPAddress(common::uint32_t ip);
-            common::uint32_t GetIPAddress();
+            common::uint64_t GetMAC();
+            void SetIP(common::uint32_t ip);
+            common::uint32_t GetIP();
         };
     }
 }

@@ -13,27 +13,27 @@ static const uint16_t ARP_COMMAND_REPLY_BE = 0x0200;
 static const int ARP_CACHE_SIZE = 128;
 static const uint64_t ARP_UNKNOWN_MAC = 0;
 
-AddressResolutionProtocol::AddressResolutionProtocol(EtherFrameProvider* backend)
+ARP::ARP(EtherFrameProvider* backend)
 : EtherFrameHandler(backend, ETHERTYPE_ARP)
 {
     numCacheEntries = 0;
 }
 
-AddressResolutionProtocol::~AddressResolutionProtocol()
+ARP::~ARP()
 {
 }
 
-bool AddressResolutionProtocol::OnEtherFrameReceived(uint8_t* etherframePayload, uint32_t size)
+bool ARP::OnEtherFrameReceived(uint8_t* etherframePayload, uint32_t size)
 {
-    if(size < sizeof(AddressResolutionProtocolMessage))
+    if(size < sizeof(ARPMessage))
         return false;
 
-    AddressResolutionProtocolMessage* arp = (AddressResolutionProtocolMessage*)etherframePayload;
+    ARPMessage* arp = (ARPMessage*)etherframePayload;
     if(arp->hardwareType == ARP_HARDWARE_ETHERNET_BE
-    && arp->protocol == ARP_PROTOCOL_IPV4_BE
+    && arp->proto == ARP_PROTOCOL_IPV4_BE
     && arp->hardwareAddressSize == ARP_HARDWARE_ADDRESS_SIZE_ETHERNET
     && arp->protocolAddressSize == ARP_PROTOCOL_ADDRESS_SIZE_IPV4
-    && arp->dstIP == backend->GetIPAddress())
+    && arp->dstIP == backend->GetIP())
     {
         switch(arp->command)
         {
@@ -41,15 +41,15 @@ bool AddressResolutionProtocol::OnEtherFrameReceived(uint8_t* etherframePayload,
                 arp->command = ARP_COMMAND_REPLY_BE;
                 arp->dstIP = arp->srcIP;
                 arp->dstMAC = arp->srcMAC;
-                arp->srcIP = backend->GetIPAddress();
-                arp->srcMAC = backend->GetMACAddress();
+                arp->srcIP = backend->GetIP();
+                arp->srcMAC = backend->GetMAC();
                 return true;
 
             case ARP_COMMAND_REPLY_BE:
                 if(numCacheEntries < ARP_CACHE_SIZE)
                 {
-                    IPcache[numCacheEntries] = arp->srcIP;
-                    MACcache[numCacheEntries] = arp->srcMAC;
+                    ipCache[numCacheEntries] = arp->srcIP;
+                    macCache[numCacheEntries] = arp->srcMAC;
                     numCacheEntries++;
                 }
                 break;
@@ -59,53 +59,53 @@ bool AddressResolutionProtocol::OnEtherFrameReceived(uint8_t* etherframePayload,
     return false;
 }
 
-void AddressResolutionProtocol::BroadcastMACAddress(uint32_t IP_BE)
+void ARP::BroadcastMAC(uint32_t ip_BE)
 {
-    AddressResolutionProtocolMessage arp;
+    ARPMessage arp;
     arp.hardwareType = ARP_HARDWARE_ETHERNET_BE;
-    arp.protocol = ARP_PROTOCOL_IPV4_BE;
+    arp.proto = ARP_PROTOCOL_IPV4_BE;
     arp.hardwareAddressSize = ARP_HARDWARE_ADDRESS_SIZE_ETHERNET;
     arp.protocolAddressSize = ARP_PROTOCOL_ADDRESS_SIZE_IPV4;
     arp.command = ARP_COMMAND_REPLY_BE;
 
-    arp.srcMAC = backend->GetMACAddress();
-    arp.srcIP = backend->GetIPAddress();
-    arp.dstMAC = Resolve(IP_BE);
-    arp.dstIP = IP_BE;
+    arp.srcMAC = backend->GetMAC();
+    arp.srcIP = backend->GetIP();
+    arp.dstMAC = Resolve(ip_BE);
+    arp.dstIP = ip_BE;
 
-    Send(arp.dstMAC, (uint8_t*)&arp, sizeof(AddressResolutionProtocolMessage));
+    Send(arp.dstMAC, (uint8_t*)&arp, sizeof(ARPMessage));
 }
 
-void AddressResolutionProtocol::RequestMACAddress(uint32_t IP_BE)
+void ARP::RequestMAC(uint32_t ip_BE)
 {
-    AddressResolutionProtocolMessage arp;
+    ARPMessage arp;
     arp.hardwareType = ARP_HARDWARE_ETHERNET_BE;
-    arp.protocol = ARP_PROTOCOL_IPV4_BE;
+    arp.proto = ARP_PROTOCOL_IPV4_BE;
     arp.hardwareAddressSize = ARP_HARDWARE_ADDRESS_SIZE_ETHERNET;
     arp.protocolAddressSize = ARP_PROTOCOL_ADDRESS_SIZE_IPV4;
     arp.command = ARP_COMMAND_REQUEST_BE;
 
-    arp.srcMAC = backend->GetMACAddress();
-    arp.srcIP = backend->GetIPAddress();
+    arp.srcMAC = backend->GetMAC();
+    arp.srcIP = backend->GetIP();
     arp.dstMAC = ARP_UNKNOWN_MAC;
-    arp.dstIP = IP_BE;
+    arp.dstIP = ip_BE;
 
-    Send(ETHERNET_BROADCAST_MAC, (uint8_t*)&arp, sizeof(AddressResolutionProtocolMessage));
+    Send(ETHERNET_BROADCAST_MAC, (uint8_t*)&arp, sizeof(ARPMessage));
 }
 
-uint64_t AddressResolutionProtocol::GetMACFromCache(uint32_t IP_BE)
+uint64_t ARP::GetMACFromCache(uint32_t ip_BE)
 {
     for(int i = 0; i < numCacheEntries; i++)
-        if(IPcache[i] == IP_BE)
-            return MACcache[i];
+        if(ipCache[i] == ip_BE)
+            return macCache[i];
     return ETHERNET_BROADCAST_MAC;
 }
 
-uint64_t AddressResolutionProtocol::Resolve(uint32_t IP_BE)
+uint64_t ARP::Resolve(uint32_t ip_BE)
 {
-    uint64_t result = GetMACFromCache(IP_BE);
+    uint64_t result = GetMACFromCache(ip_BE);
     if(result == ETHERNET_BROADCAST_MAC)
-        RequestMACAddress(IP_BE);
+        RequestMAC(ip_BE);
 
     return result;
 }

@@ -9,76 +9,74 @@ namespace myos
     namespace net
     {
 
-        struct UserDatagramProtocolHeader
+        struct UDPHeader
         {
             common::uint16_t srcPort;
             common::uint16_t dstPort;
-            common::uint16_t length;
-            common::uint16_t checksum;
+            common::uint16_t len;
+            common::uint16_t csum;
         } __attribute__((packed));
 
-        class UserDatagramProtocolSocket;
-        class UserDatagramProtocolProvider;
+        class UDPSocket;
+        class UDPProvider;
 
-        class UserDatagramProtocolHandler
+        class UDPHandler
         {
         public:
-            UserDatagramProtocolHandler();
-            ~UserDatagramProtocolHandler();
+            UDPHandler();
+            ~UDPHandler();
 
-            virtual void HandleUserDatagramProtocolMessage(UserDatagramProtocolSocket* socket,
-                                                           common::uint8_t* data,
-                                                           common::uint16_t size);
+            virtual void HandleUDPMessage(UDPSocket* socket,
+                                          common::uint8_t* data,
+                                          common::uint16_t size);
         };
 
-        class UserDatagramProtocolSocket
+        class UDPSocket
         {
-            friend class UserDatagramProtocolProvider;
+            friend class UDPProvider;
 
         protected:
             common::uint16_t remotePort;
             common::uint32_t remoteIP;
             common::uint16_t localPort;
             common::uint32_t localIP;
-            UserDatagramProtocolProvider* backend;
-            UserDatagramProtocolHandler* handler;
+            UDPProvider* backend;
+            UDPHandler* handler;
             bool listening;
 
         public:
-            UserDatagramProtocolSocket(UserDatagramProtocolProvider* backend);
-            ~UserDatagramProtocolSocket();
+            UDPSocket(UDPProvider* backend);
+            ~UDPSocket();
 
-            virtual void HandleUserDatagramProtocolMessage(common::uint8_t* data,
-                                                           common::uint16_t size);
+            virtual void HandleUDPMessage(common::uint8_t* data, common::uint16_t size);
             virtual void Send(common::uint8_t* data, common::uint16_t size);
             virtual void Disconnect();
         };
 
-        class UserDatagramProtocolProvider : public InternetProtocolHandler
+        class UDPProvider : public IPHandler
         {
         protected:
-            UserDatagramProtocolSocket* sockets[65535];
+            UDPSocket* sockets[65535];
             common::uint16_t numSockets;
             common::uint16_t freePort;
 
         public:
-            UserDatagramProtocolProvider(InternetProtocolProvider* backend);
-            ~UserDatagramProtocolProvider();
+            UDPProvider(IPProvider* backend);
+            ~UDPProvider();
 
-            virtual bool OnInternetProtocolReceived(common::uint32_t srcIP_BE,
-                                                    common::uint32_t dstIP_BE,
-                                                    common::uint8_t* internetprotocolPayload,
-                                                    common::uint32_t size);
+            virtual bool OnIPReceived(common::uint32_t srcIP_BE,
+                                      common::uint32_t dstIP_BE,
+                                      common::uint8_t* ipPayload,
+                                      common::uint32_t size);
 
-            virtual UserDatagramProtocolSocket* Connect(common::uint32_t ip,
-                                                        common::uint16_t port);
-            virtual UserDatagramProtocolSocket* Listen(common::uint16_t port);
-            virtual void Disconnect(UserDatagramProtocolSocket* socket);
-            virtual void Send(UserDatagramProtocolSocket* socket,
+            virtual UDPSocket* Connect(common::uint32_t ip, common::uint16_t port);
+            virtual UDPSocket* Listen(common::uint16_t port);
+            virtual void Disconnect(UDPSocket* socket);
+            virtual void Send(UDPSocket* socket,
                               common::uint8_t* data,
                               common::uint16_t size);
-            virtual void Bind(UserDatagramProtocolSocket* socket,
-                              UserDatagramProtocolHandler* handler);
+            virtual void Bind(UDPSocket* socket,
+                              UDPHandler* handler);
         };
 
     }

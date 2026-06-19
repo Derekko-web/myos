@@ -5,15 +5,15 @@ using namespace myos;
 using namespace myos::common;
 using namespace myos::net;
 
-static const uint16_t TCP_FIRST_DYNAMIC_PORT = 1024;
+static const uint16_t TCP_FIRST_DYN_PORT = 1024;
 static const uint16_t TCP_LOW_BYTE_MASK = 0x00FF;
 static const uint16_t TCP_HIGH_BYTE_MASK = 0xFF00;
-static const uint32_t TCP_INITIAL_SEQUENCE_NUMBER = 0xBEEFCAFE;
-static const uint16_t TCP_WINDOW_SIZE = 0xFFFF;
-static const uint16_t TCP_PROTOCOL_PSEUDOHEADER_BE = 0x0600;
-static const uint32_t TCP_SYN_OPTIONS = 0xB4050402;
+static const uint32_t TCP_INIT_SEQ_NUM = 0xBEEFCAFE;
+static const uint16_t TCP_WND_SIZE = 0xFFFF;
+static const uint16_t TCP_PROTO_PHDR_BE = 0x0600;
+static const uint32_t TCP_SYN_OPTS = 0xB4050402;
 static const uint8_t TCP_WORD_BYTES = 4;
-static const uint8_t TCP_MIN_HEADER_BYTES = 20;
+static const uint8_t TCP_MIN_HDR_BYTES = 20;
 
 static uint16_t bigEndian16(uint16_t x)
 {
@@ -28,43 +28,41 @@ static uint32_t bigEndian32(uint32_t x)
          | ((x & 0x000000FF) << 24);
 }
 
-TransmissionControlProtocolHandler::TransmissionControlProtocolHandler()
+TCPHandler::TCPHandler()
 {
 }
 
-TransmissionControlProtocolHandler::~TransmissionControlProtocolHandler()
+TCPHandler::~TCPHandler()
 {
 }
 
-bool TransmissionControlProtocolHandler::HandleTransmissionControlProtocolMessage(
-    TransmissionControlProtocolSocket* socket,
+bool TCPHandler::HandleTCPMessage(
+    TCPSocket* socket,
     uint8_t* data,
     uint16_t size)
 {
     return true;
 }
 
-TransmissionControlProtocolSocket::TransmissionControlProtocolSocket(
-    TransmissionControlProtocolProvider* backend)
+TCPSocket::TCPSocket(TCPProvider* backend)
 {
     this->backend = backend;
     handler = 0;
     state = CLOSED;
 }
 
-TransmissionControlProtocolSocket::~TransmissionControlProtocolSocket()
+TCPSocket::~TCPSocket()
 {
 }
 
-bool TransmissionControlProtocolSocket::HandleTransmissionControlProtocolMessage(uint8_t* data,
-                                                                                uint16_t size)
+bool TCPSocket::HandleTCPMessage(uint8_t* data, uint16_t size)
 {
     if(handler != 0)
-        return handler->HandleTransmissionControlProtocolMessage(this, data, size);
+        return handler->HandleTCPMessage(this, data, size);
     return false;
 }
 
-void TransmissionControlProtocolSocket::Send(uint8_t* data, uint16_t size)
+void TCPSocket::Send(uint8_t* data, uint16_t size)
 {
     while(state != ESTABLISHED)
     {
@@ -73,41 +71,40 @@ void TransmissionControlProtocolSocket::Send(uint8_t* data, uint16_t size)
     backend->Send(this, data, size, PSH | ACK);
 }
 
-void TransmissionControlProtocolSocket::Disconnect()
+void TCPSocket::Disconnect()
 {
     backend->Disconnect(this);
 }
 
-TransmissionControlProtocolProvider::TransmissionControlProtocolProvider(
-    InternetProtocolProvider* backend)
-: InternetProtocolHandler(backend, IP_PROTOCOL_TCP)
+TCPProvider::TCPProvider(IPProvider* backend)
+: IPHandler(backend, IP_PROTOCOL_TCP)
 {
     for(int i = 0; i < 65535; i++)
         sockets[i] = 0;
 
     numSockets = 0;
-    freePort = TCP_FIRST_DYNAMIC_PORT;
+    freePort = TCP_FIRST_DYN_PORT;
 }
 
-TransmissionControlProtocolProvider::~TransmissionControlProtocolProvider()
+TCPProvider::~TCPProvider()
 {
 }
 
-bool TransmissionControlProtocolProvider::OnInternetProtocolReceived(uint32_t srcIP_BE,
-                                                                    uint32_t dstIP_BE,
-                                                                    uint8_t* internetprotocolPayload,
-                                                                    uint32_t size)
+bool TCPProvider::OnIPReceived(uint32_t srcIP_BE,
+                               uint32_t dstIP_BE,
+                               uint8_t* ipPayload,
+                               uint32_t size)
 {
-    if(size < TCP_MIN_HEADER_BYTES)
+    if(size < TCP_MIN_HDR_BYTES)
         return false;
 
-    TransmissionControlProtocolHeader* msg =
-        (TransmissionControlProtocolHeader*)internetprotocolPayload;
-    uint16_t headerSize = msg->headerSize32 * TCP_WORD_BYTES;
-    if(headerSize < TCP_MIN_HEADER_BYTES || headerSize > size)
+    TCPHeader* msg =
+        (TCPHeader*)ipPayload;
+    uint16_t hdrSize = msg->hdrSize32 * TCP_WORD_BYTES;
+    if(hdrSize < TCP_MIN_HDR_BYTES || hdrSize > size)
         return false;
 
-    TransmissionControlProtocolSocket* socket = 0;
+    TCPSocket* socket = 0;
     for(uint16_t i = 0; i < numSockets && socket == 0; i++)
     {
         if(sockets[i] == 0)
@@ -118,13 +115,13 @@ bool TransmissionControlProtocolProvider::OnInternetProtocolReceived(uint32_t sr
         && sockets[i]->state == LISTEN
         && ((msg->flags & (SYN | ACK)) == SYN))
         {
-            TransmissionControlProtocolSocket* listener = sockets[i];
-            socket = (TransmissionControlProtocolSocket*)MemoryManager::activeMemoryManager->malloc(
-                sizeof(TransmissionControlProtocolSocket));
+            TCPSocket* listener = sockets[i];
+            socket = (TCPSocket*)MemoryManager::activeMemoryManager->malloc(
+                sizeof(TCPSocket));
 
             if(socket != 0)
             {
-                new (socket) TransmissionControlProtocolSocket(this);
+                new (socket) TCPSocket(this);
                 socket->localPort = listener->localPort;
                 socket->localIP = listener->localIP;
                 socket->handler = listener->handler;
@@ -156,10 +153,10 @@ bool TransmissionControlProtocolProvider::OnInternetProtocolReceived(uint32_t sr
                     socket->state = SYN_RECEIVED;
                     socket->remotePort = msg->srcPort;
                     socket->remoteIP = srcIP_BE;
-                    socket->acknowledgementNumber = bigEndian32(msg->sequenceNumber) + 1;
-                    socket->sequenceNumber = TCP_INITIAL_SEQUENCE_NUMBER;
+                    socket->ackNum = bigEndian32(msg->seqNum) + 1;
+                    socket->seqNum = TCP_INIT_SEQ_NUM;
                     Send(socket, 0, 0, SYN | ACK);
-                    socket->sequenceNumber++;
+                    socket->seqNum++;
                 }
                 else
                 {
@@ -171,8 +168,8 @@ bool TransmissionControlProtocolProvider::OnInternetProtocolReceived(uint32_t sr
                 if(socket->state == SYN_SENT)
                 {
                     socket->state = ESTABLISHED;
-                    socket->acknowledgementNumber = bigEndian32(msg->sequenceNumber) + 1;
-                    socket->sequenceNumber++;
+                    socket->ackNum = bigEndian32(msg->seqNum) + 1;
+                    socket->seqNum++;
                     Send(socket, 0, 0, ACK);
                 }
                 else
@@ -191,7 +188,7 @@ bool TransmissionControlProtocolProvider::OnInternetProtocolReceived(uint32_t sr
                 if(socket->state == ESTABLISHED)
                 {
                     socket->state = CLOSE_WAIT;
-                    socket->acknowledgementNumber++;
+                    socket->ackNum++;
                     Send(socket, 0, 0, ACK);
                     Send(socket, 0, 0, FIN | ACK);
                 }
@@ -202,7 +199,7 @@ bool TransmissionControlProtocolProvider::OnInternetProtocolReceived(uint32_t sr
                 else if(socket->state == FIN_WAIT1 || socket->state == FIN_WAIT2)
                 {
                     socket->state = CLOSED;
-                    socket->acknowledgementNumber++;
+                    socket->ackNum++;
                     Send(socket, 0, 0, ACK);
                 }
                 else
@@ -232,26 +229,26 @@ bool TransmissionControlProtocolProvider::OnInternetProtocolReceived(uint32_t sr
                     break;
 
             default:
-                if(bigEndian32(msg->sequenceNumber) == socket->acknowledgementNumber)
+                if(bigEndian32(msg->seqNum) == socket->ackNum)
                 {
-                    uint16_t payloadSize = size - headerSize;
-                    uint16_t acknowledgedPayloadSize = payloadSize;
+                    uint16_t payloadLen = size - hdrSize;
+                    uint16_t ackPayloadLen = payloadLen;
 
-                    if(payloadSize > 0)
+                    if(payloadLen > 0)
                     {
-                        acknowledgedPayloadSize = 0;
-                        for(uint32_t i = headerSize; i < size; i++)
-                            if(internetprotocolPayload[i] != 0)
-                                acknowledgedPayloadSize = i - headerSize + 1;
+                        ackPayloadLen = 0;
+                        for(uint32_t i = hdrSize; i < size; i++)
+                            if(ipPayload[i] != 0)
+                                ackPayloadLen = i - hdrSize + 1;
 
-                        if(acknowledgedPayloadSize == 0)
-                            acknowledgedPayloadSize = payloadSize;
+                        if(ackPayloadLen == 0)
+                            ackPayloadLen = payloadLen;
                     }
 
-                    socket->acknowledgementNumber += acknowledgedPayloadSize;
-                    reset = !socket->HandleTransmissionControlProtocolMessage(
-                        internetprotocolPayload + headerSize,
-                        payloadSize);
+                    socket->ackNum += ackPayloadLen;
+                    reset = !socket->HandleTCPMessage(
+                        ipPayload + hdrSize,
+                        payloadLen);
 
                     if(!reset)
                         Send(socket, 0, 0, ACK);
@@ -272,13 +269,13 @@ bool TransmissionControlProtocolProvider::OnInternetProtocolReceived(uint32_t sr
         }
         else
         {
-            TransmissionControlProtocolSocket resetSocket(this);
+            TCPSocket resetSocket(this);
             resetSocket.remotePort = msg->srcPort;
             resetSocket.remoteIP = srcIP_BE;
             resetSocket.localPort = msg->dstPort;
             resetSocket.localIP = dstIP_BE;
-            resetSocket.sequenceNumber = bigEndian32(msg->acknowledgementNumber);
-            resetSocket.acknowledgementNumber = bigEndian32(msg->sequenceNumber) + 1;
+            resetSocket.seqNum = bigEndian32(msg->ackNum);
+            resetSocket.ackNum = bigEndian32(msg->seqNum) + 1;
             Send(&resetSocket, 0, 0, RST);
         }
     }
@@ -299,71 +296,70 @@ bool TransmissionControlProtocolProvider::OnInternetProtocolReceived(uint32_t sr
     return false;
 }
 
-void TransmissionControlProtocolProvider::Send(TransmissionControlProtocolSocket* socket,
-                                               uint8_t* data,
-                                               uint16_t size,
-                                               uint16_t flags)
+void TCPProvider::Send(TCPSocket* socket,
+                       uint8_t* data,
+                       uint16_t size,
+                       uint16_t flags)
 {
-    uint16_t totalLength = size + sizeof(TransmissionControlProtocolHeader);
-    uint16_t lengthInclPHdr = totalLength + sizeof(TransmissionControlProtocolPseudoHeader);
+    uint16_t totalLen = size + sizeof(TCPHeader);
+    uint16_t lenInclPHdr = totalLen + sizeof(TCPPseudoHeader);
 
-    uint8_t* buffer = (uint8_t*)MemoryManager::activeMemoryManager->malloc(lengthInclPHdr);
+    uint8_t* buffer = (uint8_t*)MemoryManager::activeMemoryManager->malloc(lenInclPHdr);
     if(buffer == 0)
         return;
 
-    TransmissionControlProtocolPseudoHeader* phdr =
-        (TransmissionControlProtocolPseudoHeader*)buffer;
-    TransmissionControlProtocolHeader* msg =
-        (TransmissionControlProtocolHeader*)(buffer + sizeof(TransmissionControlProtocolPseudoHeader));
-    uint8_t* payload = buffer + sizeof(TransmissionControlProtocolPseudoHeader)
-                            + sizeof(TransmissionControlProtocolHeader);
+    TCPPseudoHeader* phdr =
+        (TCPPseudoHeader*)buffer;
+    TCPHeader* msg =
+        (TCPHeader*)(buffer + sizeof(TCPPseudoHeader));
+    uint8_t* payload = buffer + sizeof(TCPPseudoHeader)
+                            + sizeof(TCPHeader);
 
     msg->srcPort = socket->localPort;
     msg->dstPort = socket->remotePort;
-    msg->sequenceNumber = bigEndian32(socket->sequenceNumber);
-    msg->acknowledgementNumber = bigEndian32(socket->acknowledgementNumber);
-    msg->reserved = 0;
-    msg->headerSize32 = sizeof(TransmissionControlProtocolHeader) / TCP_WORD_BYTES;
+    msg->seqNum = bigEndian32(socket->seqNum);
+    msg->ackNum = bigEndian32(socket->ackNum);
+    msg->rsvd = 0;
+    msg->hdrSize32 = sizeof(TCPHeader) / TCP_WORD_BYTES;
     msg->flags = flags;
-    msg->windowSize = TCP_WINDOW_SIZE;
-    msg->urgentPtr = 0;
-    msg->options = (flags & SYN) ? TCP_SYN_OPTIONS : 0;
+    msg->wndSize = TCP_WND_SIZE;
+    msg->urgPtr = 0;
+    msg->opts = (flags & SYN) ? TCP_SYN_OPTS : 0;
 
-    socket->sequenceNumber += size;
+    socket->seqNum += size;
 
     for(uint16_t i = 0; i < size; i++)
         payload[i] = data[i];
 
     phdr->srcIP = socket->localIP;
     phdr->dstIP = socket->remoteIP;
-    phdr->protocol = TCP_PROTOCOL_PSEUDOHEADER_BE;
-    phdr->totalLength = bigEndian16(totalLength);
+    phdr->proto = TCP_PROTO_PHDR_BE;
+    phdr->totalLen = bigEndian16(totalLen);
 
-    msg->checksum = 0;
-    msg->checksum = InternetProtocolProvider::Checksum((uint16_t*)buffer, lengthInclPHdr);
+    msg->csum = 0;
+    msg->csum = IPProvider::Csum((uint16_t*)buffer, lenInclPHdr);
 
-    InternetProtocolHandler::Send(socket->remoteIP, (uint8_t*)msg, totalLength);
+    IPHandler::Send(socket->remoteIP, (uint8_t*)msg, totalLen);
     MemoryManager::activeMemoryManager->free(buffer);
 }
 
-TransmissionControlProtocolSocket* TransmissionControlProtocolProvider::Connect(uint32_t ip,
-                                                                                uint16_t port)
+TCPSocket* TCPProvider::Connect(uint32_t ip, uint16_t port)
 {
-    TransmissionControlProtocolSocket* socket =
-        (TransmissionControlProtocolSocket*)MemoryManager::activeMemoryManager->malloc(
-            sizeof(TransmissionControlProtocolSocket));
+    TCPSocket* socket =
+        (TCPSocket*)MemoryManager::activeMemoryManager->malloc(
+            sizeof(TCPSocket));
 
     if(socket == 0)
         return 0;
 
-    new (socket) TransmissionControlProtocolSocket(this);
+    new (socket) TCPSocket(this);
 
     socket->remotePort = bigEndian16(port);
     socket->remoteIP = ip;
     socket->localPort = bigEndian16(freePort++);
-    socket->localIP = backend->GetIPAddress();
+    socket->localIP = backend->GetIP();
     socket->state = SYN_SENT;
-    socket->sequenceNumber = TCP_INITIAL_SEQUENCE_NUMBER;
+    socket->seqNum = TCP_INIT_SEQ_NUM;
 
     sockets[numSockets++] = socket;
     Send(socket, 0, 0, SYN);
@@ -371,37 +367,36 @@ TransmissionControlProtocolSocket* TransmissionControlProtocolProvider::Connect(
     return socket;
 }
 
-TransmissionControlProtocolSocket* TransmissionControlProtocolProvider::Listen(uint16_t port)
+TCPSocket* TCPProvider::Listen(uint16_t port)
 {
-    TransmissionControlProtocolSocket* socket =
-        (TransmissionControlProtocolSocket*)MemoryManager::activeMemoryManager->malloc(
-            sizeof(TransmissionControlProtocolSocket));
+    TCPSocket* socket =
+        (TCPSocket*)MemoryManager::activeMemoryManager->malloc(
+            sizeof(TCPSocket));
 
     if(socket == 0)
         return 0;
 
-    new (socket) TransmissionControlProtocolSocket(this);
+    new (socket) TCPSocket(this);
 
     socket->state = LISTEN;
-    socket->localIP = backend->GetIPAddress();
+    socket->localIP = backend->GetIP();
     socket->localPort = bigEndian16(port);
 
     sockets[numSockets++] = socket;
     return socket;
 }
 
-void TransmissionControlProtocolProvider::Disconnect(TransmissionControlProtocolSocket* socket)
+void TCPProvider::Disconnect(TCPSocket* socket)
 {
     if(socket == 0)
         return;
 
     socket->state = FIN_WAIT1;
     Send(socket, 0, 0, FIN | ACK);
-    socket->sequenceNumber++;
+    socket->seqNum++;
 }
 
-void TransmissionControlProtocolProvider::Bind(TransmissionControlProtocolSocket* socket,
-                                               TransmissionControlProtocolHandler* handler)
+void TCPProvider::Bind(TCPSocket* socket, TCPHandler* handler)
 {
     if(socket != 0)
         socket->handler = handler;

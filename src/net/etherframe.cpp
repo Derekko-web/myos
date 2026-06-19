@@ -32,9 +32,9 @@ void EtherFrameHandler::Send(uint64_t dstMAC_BE, uint8_t* data, uint32_t size)
     backend->Send(dstMAC_BE, etherType_BE, data, size);
 }
 
-uint32_t EtherFrameHandler::GetIPAddress()
+uint32_t EtherFrameHandler::GetIP()
 {
-    return backend->GetIPAddress();
+    return backend->GetIP();
 }
 
 EtherFrameProvider::EtherFrameProvider(amd_am79c973* backend)
@@ -56,7 +56,7 @@ bool EtherFrameProvider::OnRawDataReceived(uint8_t* buffer, uint32_t size)
     EtherFrameHeader* frame = (EtherFrameHeader*)buffer;
     bool sendBack = false;
 
-    if(frame->dstMAC_BE == ETHERNET_BROADCAST_MAC || frame->dstMAC_BE == backend->GetMACAddress())
+    if(frame->dstMAC_BE == ETHERNET_BROADCAST_MAC || frame->dstMAC_BE == backend->GetMAC())
     {
         if(handlers[frame->etherType_BE] != 0)
             sendBack = handlers[frame->etherType_BE]->OnEtherFrameReceived(
@@ -66,7 +66,7 @@ bool EtherFrameProvider::OnRawDataReceived(uint8_t* buffer, uint32_t size)
     if(sendBack)
     {
         frame->dstMAC_BE = frame->srcMAC_BE;
-        frame->srcMAC_BE = backend->GetMACAddress();
+        frame->srcMAC_BE = backend->GetMAC();
     }
 
     return sendBack;
@@ -80,7 +80,7 @@ void EtherFrameProvider::Send(uint64_t dstMAC_BE, uint16_t etherType_BE, uint8_t
 
     EtherFrameHeader* frame = (EtherFrameHeader*)buffer2;
     frame->dstMAC_BE = dstMAC_BE;
-    frame->srcMAC_BE = backend->GetMACAddress();
+    frame->srcMAC_BE = backend->GetMAC();
     frame->etherType_BE = etherType_BE;
 
     uint8_t* dst = buffer2 + sizeof(EtherFrameHeader);
@@ -91,12 +91,12 @@ void EtherFrameProvider::Send(uint64_t dstMAC_BE, uint16_t etherType_BE, uint8_t
     MemoryManager::activeMemoryManager->free(buffer2);
 }
 
-uint32_t EtherFrameProvider::GetIPAddress()
+uint32_t EtherFrameProvider::GetIP()
 {
-    return backend->GetIPAddress();
+    return backend->GetIP();
 }
 
-uint64_t EtherFrameProvider::GetMACAddress()
+uint64_t EtherFrameProvider::GetMAC()
 {
-    return backend->GetMACAddress();
+    return backend->GetMAC();
 }

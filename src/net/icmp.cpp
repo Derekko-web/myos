@@ -10,26 +10,26 @@ static const uint8_t ICMP_CODE_ECHO = 0;
 static const uint16_t ICMP_ECHO_DEMO_DATA = 0x3713;
 static const uint8_t IP_OCTET_MASK = 0xFF;
 
-InternetControlMessageProtocol::InternetControlMessageProtocol(InternetProtocolProvider* backend)
-: InternetProtocolHandler(backend, IP_PROTOCOL_ICMP)
+ICMP::ICMP(IPProvider* backend)
+: IPHandler(backend, IP_PROTOCOL_ICMP)
 {
 }
 
-InternetControlMessageProtocol::~InternetControlMessageProtocol()
+ICMP::~ICMP()
 {
 }
 
 void printf(const char*);
 void printfHex(uint8_t);
 
-bool InternetControlMessageProtocol::OnInternetProtocolReceived(uint32_t srcIP_BE, uint32_t dstIP_BE,
-                                                                uint8_t* internetprotocolPayload,
-                                                                uint32_t size)
+bool ICMP::OnIPReceived(uint32_t srcIP_BE, uint32_t dstIP_BE,
+                        uint8_t* ipPayload,
+                        uint32_t size)
 {
-    if(size < sizeof(InternetControlMessageProtocolMessage))
+    if(size < sizeof(ICMPMessage))
         return false;
 
-    InternetControlMessageProtocolMessage* msg = (InternetControlMessageProtocolMessage*)internetprotocolPayload;
+    ICMPMessage* msg = (ICMPMessage*)ipPayload;
 
     switch(msg->type)
     {
@@ -47,24 +47,24 @@ bool InternetControlMessageProtocol::OnInternetProtocolReceived(uint32_t srcIP_B
 
         case ICMP_TYPE_ECHO_REQUEST:
             msg->type = ICMP_TYPE_ECHO_REPLY;
-            msg->checksum = 0;
-            msg->checksum = InternetProtocolProvider::Checksum((uint16_t*)msg,
-                sizeof(InternetControlMessageProtocolMessage));
+            msg->csum = 0;
+            msg->csum = IPProvider::Csum((uint16_t*)msg,
+                sizeof(ICMPMessage));
             return true;
     }
 
     return false;
 }
 
-void InternetControlMessageProtocol::RequestEchoReply(uint32_t ip_be)
+void ICMP::RequestEchoReply(uint32_t ip_be)
 {
-    InternetControlMessageProtocolMessage icmp;
+    ICMPMessage icmp;
     icmp.type = ICMP_TYPE_ECHO_REQUEST;
     icmp.code = ICMP_CODE_ECHO;
     icmp.data = ICMP_ECHO_DEMO_DATA;
-    icmp.checksum = 0;
-    icmp.checksum = InternetProtocolProvider::Checksum((uint16_t*)&icmp,
-        sizeof(InternetControlMessageProtocolMessage));
+    icmp.csum = 0;
+    icmp.csum = IPProvider::Csum((uint16_t*)&icmp,
+        sizeof(ICMPMessage));
 
-    InternetProtocolHandler::Send(ip_be, (uint8_t*)&icmp, sizeof(InternetControlMessageProtocolMessage));
+    IPHandler::Send(ip_be, (uint8_t*)&icmp, sizeof(ICMPMessage));
 }

@@ -9,7 +9,7 @@ namespace myos
     namespace net
     {
 
-        enum TransmissionControlProtocolSocketState
+        enum TCPSocketState
         {
             CLOSED,
             LISTEN,
@@ -23,7 +23,7 @@ namespace myos
             CLOSE_WAIT
         };
 
-        enum TransmissionControlProtocolFlag
+        enum TCPFlag
         {
             FIN = 1,
             SYN = 2,
@@ -36,98 +36,96 @@ namespace myos
             NS = 256
         };
 
-        struct TransmissionControlProtocolHeader
+        struct TCPHeader
         {
             common::uint16_t srcPort;
             common::uint16_t dstPort;
-            common::uint32_t sequenceNumber;
-            common::uint32_t acknowledgementNumber;
+            common::uint32_t seqNum;
+            common::uint32_t ackNum;
 
-            common::uint8_t reserved : 4;
-            common::uint8_t headerSize32 : 4;
+            common::uint8_t rsvd : 4;
+            common::uint8_t hdrSize32 : 4;
             common::uint8_t flags;
 
-            common::uint16_t windowSize;
-            common::uint16_t checksum;
-            common::uint16_t urgentPtr;
+            common::uint16_t wndSize;
+            common::uint16_t csum;
+            common::uint16_t urgPtr;
 
-            common::uint32_t options;
+            common::uint32_t opts;
         } __attribute__((packed));
 
-        struct TransmissionControlProtocolPseudoHeader
+        struct TCPPseudoHeader
         {
             common::uint32_t srcIP;
             common::uint32_t dstIP;
-            common::uint16_t protocol;
-            common::uint16_t totalLength;
+            common::uint16_t proto;
+            common::uint16_t totalLen;
         } __attribute__((packed));
 
-        class TransmissionControlProtocolSocket;
-        class TransmissionControlProtocolProvider;
+        class TCPSocket;
+        class TCPProvider;
 
-        class TransmissionControlProtocolHandler
+        class TCPHandler
         {
         public:
-            TransmissionControlProtocolHandler();
-            ~TransmissionControlProtocolHandler();
+            TCPHandler();
+            ~TCPHandler();
 
-            virtual bool HandleTransmissionControlProtocolMessage(TransmissionControlProtocolSocket* socket,
-                                                                  common::uint8_t* data,
-                                                                  common::uint16_t size);
+            virtual bool HandleTCPMessage(TCPSocket* socket,
+                                          common::uint8_t* data,
+                                          common::uint16_t size);
         };
 
-        class TransmissionControlProtocolSocket
+        class TCPSocket
         {
-            friend class TransmissionControlProtocolProvider;
+            friend class TCPProvider;
 
         protected:
             common::uint16_t remotePort;
             common::uint32_t remoteIP;
             common::uint16_t localPort;
             common::uint32_t localIP;
-            common::uint32_t sequenceNumber;
-            common::uint32_t acknowledgementNumber;
+            common::uint32_t seqNum;
+            common::uint32_t ackNum;
 
-            TransmissionControlProtocolProvider* backend;
-            TransmissionControlProtocolHandler* handler;
-            TransmissionControlProtocolSocketState state;
+            TCPProvider* backend;
+            TCPHandler* handler;
+            TCPSocketState state;
 
         public:
-            TransmissionControlProtocolSocket(TransmissionControlProtocolProvider* backend);
-            ~TransmissionControlProtocolSocket();
+            TCPSocket(TCPProvider* backend);
+            ~TCPSocket();
 
-            virtual bool HandleTransmissionControlProtocolMessage(common::uint8_t* data,
-                                                                  common::uint16_t size);
+            virtual bool HandleTCPMessage(common::uint8_t* data, common::uint16_t size);
             virtual void Send(common::uint8_t* data, common::uint16_t size);
             virtual void Disconnect();
         };
 
-        class TransmissionControlProtocolProvider : public InternetProtocolHandler
+        class TCPProvider : public IPHandler
         {
         protected:
-            TransmissionControlProtocolSocket* sockets[65535];
+            TCPSocket* sockets[65535];
             common::uint16_t numSockets;
             common::uint16_t freePort;
 
         public:
-            TransmissionControlProtocolProvider(InternetProtocolProvider* backend);
-            ~TransmissionControlProtocolProvider();
+            TCPProvider(IPProvider* backend);
+            ~TCPProvider();
 
-            virtual bool OnInternetProtocolReceived(common::uint32_t srcIP_BE,
-                                                    common::uint32_t dstIP_BE,
-                                                    common::uint8_t* internetprotocolPayload,
-                                                    common::uint32_t size);
+            virtual bool OnIPReceived(common::uint32_t srcIP_BE,
+                                      common::uint32_t dstIP_BE,
+                                      common::uint8_t* ipPayload,
+                                      common::uint32_t size);
 
-            virtual TransmissionControlProtocolSocket* Connect(common::uint32_t ip,
-                                                               common::uint16_t port);
-            virtual TransmissionControlProtocolSocket* Listen(common::uint16_t port);
-            virtual void Disconnect(TransmissionControlProtocolSocket* socket);
-            virtual void Send(TransmissionControlProtocolSocket* socket,
+            virtual TCPSocket* Connect(common::uint32_t ip, common::uint16_t port);
+            virtual TCPSocket* Listen(common::uint16_t port);
+            virtual void Disconnect(TCPSocket* socket);
+            virtual void Send(TCPSocket* socket,
                               common::uint8_t* data,
                               common::uint16_t size,
                               common::uint16_t flags = 0);
-            virtual void Bind(TransmissionControlProtocolSocket* socket,
-                              TransmissionControlProtocolHandler* handler);
+            virtual void Bind(TCPSocket* socket,
+                              TCPHandler* handler);
         };
 
     }

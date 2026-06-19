@@ -51,6 +51,7 @@ AdvancedTechnologyAttachment::AdvancedTechnologyAttachment(bool master, common::
     controlPort(portBase + ATA_REG_CONTROL_OFFSET)
 {
     this->master = master;
+    bytesPerSector = 512;
 }
 
 AdvancedTechnologyAttachment::~AdvancedTechnologyAttachment()
@@ -110,12 +111,15 @@ void AdvancedTechnologyAttachment::Identify()
     printf("\n");
 }
 
-void AdvancedTechnologyAttachment::Read28(common::uint32_t sectorNum, int count)
+void AdvancedTechnologyAttachment::Read28(common::uint32_t sectorNum,
+                                          common::uint8_t* data,
+                                          common::uint32_t count,
+                                          bool trace)
 {
-    if(sectorNum > ATA_LBA28_MAX_SECTOR || count <= 0)
+    if(sectorNum > ATA_LBA28_MAX_SECTOR || data == 0 || count == 0)
         return;
-    if(count > 512)
-        count = 512;
+    if(count > bytesPerSector)
+        count = bytesPerSector;
 
     devicePort.Write((master ? ATA_DEVICE_MASTER_LBA28 : ATA_DEVICE_SLAVE_LBA28)
         | ((sectorNum & ATA_LBA28_HEAD_MASK) >> 24));
@@ -127,10 +131,29 @@ void AdvancedTechnologyAttachment::Read28(common::uint32_t sectorNum, int count)
     commandPort.Write(ATA_CMD_READ_SECTORS);
 
     uint8_t status = commandPort.Read();
+    if(status == ATA_STATUS_NO_DRIVE || status == ATA_STATUS_FLOATING_BUS)
+    {
+        printf("NO DRIVE\n");
+        return;
+    }
+
+    uint32_t timeout = 0x100000;
     while(((status & ATA_STATUS_BUSY) == ATA_STATUS_BUSY
         || (status & ATA_STATUS_DATA_REQUEST) != ATA_STATUS_DATA_REQUEST)
-       && ((status & ATA_STATUS_ERROR) != ATA_STATUS_ERROR))
+       && ((status & ATA_STATUS_ERROR) != ATA_STATUS_ERROR)
+       && timeout > 0)
+    {
         status = commandPort.Read();
+        timeout--;
+    }
+
+    if(timeout == 0
+    && (((status & ATA_STATUS_BUSY) == ATA_STATUS_BUSY)
+     || ((status & ATA_STATUS_DATA_REQUEST) != ATA_STATUS_DATA_REQUEST)))
+    {
+        printf("ATA READ TIMEOUT\n");
+        return;
+    }
 
     if(status & ATA_STATUS_ERROR)
     {
@@ -138,19 +161,19 @@ void AdvancedTechnologyAttachment::Read28(common::uint32_t sectorNum, int count)
         return;
     }
 
-    printf("Read back: ");
+    if(trace)
+        printf("Reading from ATA: ");
 
-    for(int i = 0; i < count; i += 2)
+    for(common::uint32_t i = 0; i < count; i += 2)
     {
         uint16_t wdata = dataPort.Read();
 
-        char text[] = "  ";
-        text[0] = wdata & BYTE_MASK;
-        text[1] = (i+1 < count) ? ((wdata >> 8) & BYTE_MASK) : '\0';
-        printf(text);
+        data[i] = wdata & BYTE_MASK;
+        if(i+1 < count)
+            data[i+1] = (wdata >> 8) & BYTE_MASK;
     }
 
-    for(int i = count + (count%2); i < 512; i += 2)
+    for(common::uint32_t i = count + (count%2); i < bytesPerSector; i += 2)
         dataPort.Read();
 }
 

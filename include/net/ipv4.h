@@ -13,64 +13,67 @@ namespace myos
         static const common::uint8_t IP_PROTOCOL_TCP = 0x06;
         static const common::uint8_t IP_PROTOCOL_UDP = 0x11;
 
-        struct InternetProtocolV4Message
+        struct IPv4Message
         {
-            common::uint8_t headerLength : 4;
+            common::uint8_t hdrLen : 4;
             common::uint8_t version : 4;
             common::uint8_t tos;
-            common::uint16_t totalLength;
+            common::uint16_t totalLen;
 
             common::uint16_t ident;
-            common::uint16_t flagsAndOffset;
+            common::uint16_t flagsOffset;
 
-            common::uint8_t timeToLive;
-            common::uint8_t protocol;
-            common::uint16_t checksum;
+            common::uint8_t ttl;
+            common::uint8_t proto;
+            common::uint16_t csum;
 
             common::uint32_t srcIP;
             common::uint32_t dstIP;
         } __attribute__((packed));
 
-        class InternetProtocolProvider;
+        class IPProvider;
 
-        class InternetProtocolHandler
+        class IPHandler
         {
         protected:
-            InternetProtocolProvider* backend;
-            common::uint8_t ip_protocol;
+            IPProvider* backend;
+            common::uint8_t proto;
 
         public:
-            InternetProtocolHandler(InternetProtocolProvider* backend, common::uint8_t protocol);
-            ~InternetProtocolHandler();
+            IPHandler(IPProvider* backend, common::uint8_t proto);
+            ~IPHandler();
 
-            virtual bool OnInternetProtocolReceived(common::uint32_t srcIP_BE, common::uint32_t dstIP_BE,
-                                                    common::uint8_t* internetprotocolPayload,
-                                                    common::uint32_t size);
-            void Send(common::uint32_t dstIP_BE, common::uint8_t* internetprotocolPayload, common::uint32_t size);
+            virtual bool OnIPReceived(common::uint32_t srcIP_BE, common::uint32_t dstIP_BE,
+                                      common::uint8_t* ipPayload,
+                                      common::uint32_t size);
+            void Send(common::uint32_t dstIP_BE, common::uint8_t* ipPayload, common::uint32_t size);
         };
 
-        class InternetProtocolProvider : public EtherFrameHandler
+        class IPProvider : public EtherFrameHandler
         {
-            friend class InternetProtocolHandler;
+            friend class IPHandler;
 
         protected:
-            InternetProtocolHandler* handlers[255];
-            AddressResolutionProtocol* arp;
+            IPHandler* handlers[255];
+            ARP* arp;
             common::uint32_t gatewayIP;
             common::uint32_t subnetMask;
 
         public:
-            InternetProtocolProvider(EtherFrameProvider* backend,
-                                     AddressResolutionProtocol* arp,
-                                     common::uint32_t gatewayIP,
-                                     common::uint32_t subnetMask);
-            ~InternetProtocolProvider();
+            IPProvider(EtherFrameProvider* backend,
+                       ARP* arp,
+                       common::uint32_t gatewayIP,
+                       common::uint32_t subnetMask);
+            ~IPProvider();
 
             bool OnEtherFrameReceived(common::uint8_t* etherframePayload, common::uint32_t size);
 
-            void Send(common::uint32_t dstIP_BE, common::uint8_t protocol, common::uint8_t* buffer, common::uint32_t size);
+            void Send(common::uint32_t dstIP_BE,
+                      common::uint8_t proto,
+                      common::uint8_t* buffer,
+                      common::uint32_t size);
 
-            static common::uint16_t Checksum(common::uint16_t* data, common::uint32_t lengthInBytes);
+            static common::uint16_t Csum(common::uint16_t* data, common::uint32_t lenBytes);
         };
     }
 }
