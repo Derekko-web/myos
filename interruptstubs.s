@@ -64,27 +64,27 @@ HandleInterruptRequest 0x31
 
 int_bottom:
 
-    # register sichern
+    # Save registers
     pusha
     pushl %ds
     pushl %es
     pushl %fs
     pushl %gs
 
-    # ring 0 segment register laden
+    # Load ring 0 segment registers
     #cld
     #mov $0x10, %eax
     #mov %eax, %eds
     #mov %eax, %ees
 
-    # C++ Handler aufrufen
+    # Call the C++ interrupt handler
     pushl %esp
     push (interruptnumber)
     call _ZN16InterruptManager15HandleInterruptEhj
     add %esp, 6
-    mov %eax, %esp # den stack wechseln
+    mov %eax, %esp # Switch to the returned stack
 
-    # register laden
+    # Restore registers
     pop %gs
     pop %fs
     pop %es
