@@ -245,10 +245,10 @@ public:
                     "HTTP/1.1 200 OK\r\n"
                     "Server: MyOS\r\n"
                     "Content-Type: text/html\r\n"
-                    "Content-Length: 127\r\n"
+                    "Content-Length: 93\r\n"
                     "Connection: close\r\n"
                     "\r\n"
-                    "<html><head><title>My Operating System</title></head><body><b>My Operating System</b> http://www.AlgorithMan.de</body></html>\r\n";
+                    "<html><head><title>myos - Derek Ko</title></head><body><b>myos - Derek Ko</b></body></html>\r\n";
                 socket->Send((uint8_t*)response, sizeof(response)-1);
             }
             else
@@ -308,7 +308,7 @@ extern "C" void callConstructors()
 extern "C" void kernelMain(const void* multiboot_structure, uint32_t /*multiboot_magic*/)
 {
     #ifdef KERNEL_TRACE_OUTPUT
-    printf("Hello World! --- http://www.AlgorithMan.de\n");
+    printf("myos - Derek Ko\n");
     #endif
 
     GlobalDescriptorTable gdt;
