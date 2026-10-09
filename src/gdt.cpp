@@ -1,12 +1,22 @@
 
-#include "gdt.h"
+#include <gdt.h>
+using namespace myos;
+using namespace myos::common;
+
+static const uint8_t GDT_CODE_SEGMENT_ACCESS = 0x9A;
+static const uint8_t GDT_DATA_SEGMENT_ACCESS = 0x92;
+static const uint8_t GDT_FLAG_16_BIT = 0x40;
+static const uint8_t GDT_FLAG_32_BIT_GRANULAR = 0xC0;
+static const uint32_t GDT_PAGE_GRANULARITY_MASK = 0xFFF;
+static const uint8_t BYTE_MASK = 0xFF;
+static const uint8_t NIBBLE_MASK = 0x0F;
 
 
 GlobalDescriptorTable::GlobalDescriptorTable()
     : nullSegmentSelector(0, 0, 0),
         unusedSegmentSelector(0, 0, 0),
-        codeSegmentSelector(0, 64*1024*1024, 0x9A),
-        dataSegmentSelector(0, 64*1024*1024, 0x92)
+        codeSegmentSelector(0, 64*1024*1024, GDT_CODE_SEGMENT_ACCESS),
+        dataSegmentSelector(0, 64*1024*1024, GDT_DATA_SEGMENT_ACCESS)
 {
     uint32_t i[2];
     i[1] = (uint32_t)this;
@@ -35,7 +45,7 @@ GlobalDescriptorTable::SegmentDescriptor::SegmentDescriptor(uint32_t base, uint3
     if (limit <= 65536)
     {
         // 16-bit address space
-        target[6] = 0x40;
+        target[6] = GDT_FLAG_16_BIT;
     }
     else
     {
@@ -50,24 +60,24 @@ GlobalDescriptorTable::SegmentDescriptor::SegmentDescriptor(uint32_t base, uint3
         // compensate this by decreasing a higher bit (and might have up to
         // 4095 wasted bytes behind the used memory)
 
-        if((limit & 0xFFF) != 0xFFF)
+        if((limit & GDT_PAGE_GRANULARITY_MASK) != GDT_PAGE_GRANULARITY_MASK)
             limit = (limit >> 12)-1;
         else
             limit = limit >> 12;
 
-        target[6] = 0xC0;
+        target[6] = GDT_FLAG_32_BIT_GRANULAR;
     }
 
     // Encode the limit
-    target[0] = limit & 0xFF;
-    target[1] = (limit >> 8) & 0xFF;
-    target[6] |= (limit >> 16) & 0xF;
+    target[0] = limit & BYTE_MASK;
+    target[1] = (limit >> 8) & BYTE_MASK;
+    target[6] |= (limit >> 16) & NIBBLE_MASK;
 
     // Encode the base
-    target[2] = base & 0xFF;
-    target[3] = (base >> 8) & 0xFF;
-    target[4] = (base >> 16) & 0xFF;
-    target[7] = (base >> 24) & 0xFF;
+    target[2] = base & BYTE_MASK;
+    target[3] = (base >> 8) & BYTE_MASK;
+    target[4] = (base >> 16) & BYTE_MASK;
+    target[7] = (base >> 24) & BYTE_MASK;
 
     // Type
     target[5] = type;
@@ -89,13 +99,12 @@ uint32_t GlobalDescriptorTable::SegmentDescriptor::Limit()
 {
     uint8_t* target = (uint8_t*)this;
 
-    uint32_t result = target[6] & 0xF;
+    uint32_t result = target[6] & NIBBLE_MASK;
     result = (result << 8) + target[1];
     result = (result << 8) + target[0];
 
-    if((target[6] & 0xC0) == 0xC0)
-        result = (result << 12) | 0xFFF;
+    if((target[6] & GDT_FLAG_32_BIT_GRANULAR) == GDT_FLAG_32_BIT_GRANULAR)
+        result = (result << 12) | GDT_PAGE_GRANULARITY_MASK;
 
     return result;
 }
-
