@@ -27,3 +27,7 @@
 *.exe
 *.out
 *.app
+
+# OS build artifacts
+mykernel.bin
+mykernel.iso

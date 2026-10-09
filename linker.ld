@@ -10,7 +10,8 @@ PHDRS
 
 SECTIONS
 {
-  . = 0x0100000;
+  KERNEL_LOAD_ADDRESS = 0x0100000;
+  . = KERNEL_LOAD_ADDRESS;
 
   .text :
   {
